@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -8,26 +7,33 @@
 </head>
 <body>
 <div class="container mt-4">
-    <h1>Recommandez-moi un livre</h1>
+    <h1 class="text-center mb-4">Recommandez-moi un livre</h1>
 
-    <form method="post" action="/api/recommander-par-description">
+    <!-- Formulaire de recherche -->
+    <form method="post" action="api/recommandation-par-description">
         <div class="mb-3">
-            <label for="description" class="form-label">Décrivez le livre que vous cherchez...</label>
+            <label for="description" class="form-label">Décrivez le livre que vous cherchez…</label>
             <textarea class="form-control" id="description" name="description" rows="3" required>{{ description or '' }}</textarea>
         </div>
-        <button type="submit" class="btn btn-primary">Obtenir des suggestions</button>
+        <button type="submit" class="btn btn-success">Obtenir des suggestions</button>
     </form>
 
+    <!-- Affichage des suggestions -->
     {% if suggestions %}
     <h3 class="mt-4">Suggestions :</h3>
     <div class="row">
         {% for livre in suggestions %}
         <div class="col-md-3 mb-3">
-            <div class="card h-100">
+            <div class="card h-100 shadow-sm">
+                {% if livre.image_url %}
                 <img src="{{ livre.image_url }}" class="card-img-top" alt="{{ livre.titre }}">
+                {% else %}
+                <img src="https://via.placeholder.com/150x200?text=Livre" class="card-img-top" alt="Couverture">
+                {% endif %}
                 <div class="card-body">
                     <h5 class="card-title">{{ livre.titre }}</h5>
-                    <a href="/livre/{{ livre.id }}" class="btn btn-primary">Voir détails</a>
+                    <p class="card-text">{{ livre.description[:100] }}...</p>
+                    <a href="/livre/{{ livre.id }}" class="btn btn-outline-primary btn-sm">Voir détails</a>
                 </div>
             </div>
         </div>

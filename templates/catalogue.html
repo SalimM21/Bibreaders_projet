@@ -61,7 +61,9 @@ body {
 </style>
 </head>
 <body>
-<div class="container mt-5">
+
+
+ <div class="container mt-5">
     <h1 class="mb-4">Catalogue des livres</h1>
 
     <!-- Barre de recherche -->
@@ -89,8 +91,9 @@ body {
                             Réservé
                         {% endif %}
                     </p>
-                    <p class="card-text"><strong>Note :</strong> {{ livre.rating or 'N/A' }}</p>
-                    <a href="/reserver/{{ livre.id }}" class="btn btn-success mt-auto">Réserver</a>
+                    <!--<p class="card-text"><strong>Note :</strong> {{ livre.rating or 'N/A' }}</p>
+                    <a href="/reserver/{{ livre.id }}" class="btn btn-success mt-auto">Réserver</a>-->
+                 <a href="/livre/{{ livre.id }}" class="btn btn-primary btn-sm mt-2">Voir détails</a>
                 </div>
             </div>
         </div>

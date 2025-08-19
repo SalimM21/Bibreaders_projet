@@ -46,9 +46,10 @@ CREATE TABLE IF NOT EXISTS livres (
 # 4. Importer le CSV avec Pandas
 # ===============================
 
-df = pd.read_csv('dataset/livres_bruts.csv') 
+#df = pd.read_csv('dataset/livres_bruts.csv') 
 
 # Renommer les colonnes
+'''
 df.rename(columns={
     'Title': 'title',
     'Description': 'description',
@@ -57,15 +58,12 @@ df.rename(columns={
     'Image_URL': 'image_url',
     'Rating': 'rating',
     'availability_num': 'availability_num'
-}, inplace=True)
-# Vérifier les colonnes
-print("Aperçu des données :")
-print(df.head())
+}, inplace=True)'''
+
 
 # ===============================
 # 5. Insérer les données en base
 # ===============================
 
-df.to_sql("livres", con=engine, if_exists="append", index=False)
+#df.to_sql("livres", con=engine, if_exists="append", index=False)
 
-print(" Import terminé avec succès !")
