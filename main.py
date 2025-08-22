@@ -494,3 +494,45 @@ def retour_emprunt(
 
     db.commit()
     return {"message": "Retour enregistré avec succès"}
+#---------------------------------ROUTES GESTION ADHERENTS ------------------------------------------------------
+
+
+# 🔹 Route pour récupérer tous les adhérents
+@app.get("/api/adherent")
+def get_adherents(db: Session = Depends(get_db)):
+    adherents = db.query(Adherent).all()
+    result = []
+    for a in adherents:
+        result.append({
+            "id": a.id,
+            "nom": a.nom,
+            # si tu as un champ prénom, tu peux l'ajouter ici
+            # "prenom": a.prenom
+        })
+    return result
+
+# 🔹 Route pour récupérer les livres disponibles (stock > 0)
+@app.get("/api/livres-disponibles")
+def get_livres_disponibles(db: Session = Depends(get_db)):
+    livres = db.query(Livre).filter(Livre.availability_num > 0).all()
+    result = []
+    for l in livres:
+        result.append({
+            "id": l.id,
+            "title": l.title,
+            "stock": l.availability_num
+        })
+    return result
+
+#  Route pour récupérer les emprunts en cours
+@app.get("/api/emprunts-en-cours")
+def get_emprunts_en_cours(db: Session = Depends(get_db)):
+    emprunts = db.query(Emprunt).filter(Emprunt.date_retour_effectif == None).all()
+    result = []
+    for e in emprunts:
+        result.append({
+            "id": e.id,
+            "livre_title": e.livre.title,
+            "adherent_nom": e.adherent.nom
+        })
+    return result
