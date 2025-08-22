@@ -138,7 +138,7 @@
                 📗 Enregistrer un nouvel emprunt
             </div>
             <div class="card-body">
-                <form id="form-nouvel-emprunt" method="POST" action="/api/emprunts/nouveau">
+                <form id="form-nouvel-emprunt" method="POST" action="/api/emprunts">
                     <div class="mb-3">
                         <label for="adherent" class="form-label">Sélectionner l'adhérent</label>
                         <select id="adherent" name="adherent_id" class="form-select" required>
@@ -164,7 +164,7 @@
                 🔄 Enregistrer un retour
             </div>
             <div class="card-body">
-                <form id="form-retour-emprunt" method="POST" action="/api/emprunts/retour">
+                <form id="form-retour-emprunt" method="POST" action="/api/retours">
                     <div class="mb-3">
                         <label for="emprunt" class="form-label">Sélectionner le prêt en cours</label>
                         <select id="emprunt" name="emprunt_id" class="form-select" required>

@@ -68,6 +68,8 @@
           <li class="nav-item"><a class="nav-link" href="/catalogue">Catalogue</a></li>
           <li class="nav-item"><a class="nav-link" href="/profil">Mes emprunts</a></li>
           <li class="nav-item"><a class="nav-link" href="/recommandation-par-description">Recommandations</a></li>
+          <li class="nav-item"><a class="nav-link" href="admin/gestion-adherents">Gestion des adhérents</a></li>
+          
         </ul>
 
         <!-- Boutons Se connecter / S'inscrire -->
@@ -155,12 +157,12 @@
       <ul class="pagination">
         {% if page > 1 %}
         <li class="page-item">
-          <a class="page-link" href="/catalogue?page={{ page-1 }}&search={{ search }}">Précédent</a>
+          <a class="page-link" href="/?page={{ page-1 }}&search={{ search }}">Précédent</a>
         </li>
         {% endif %}
         {% if page < total_pages %}
         <li class="page-item">
-          <a class="page-link" href="/catalogue?page={{ page+1 }}&search={{ search }}">Suivant</a>
+          <a class="page-link" href="/?page={{ page+1 }}&search={{ search }}">Suivant</a>
         </li>
         {% endif %}
       </ul>

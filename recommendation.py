@@ -1,18 +1,20 @@
 
 
 #Charger le modèle pré-calculé
-import pickle
+import joblib
 import pandas as pd
 from sqlalchemy.orm import Session
 from database import SessionLocal
 from models import Livre
+from sklearn.metrics.pairwise import cosine_similarity
+
 
 # Charger le TF-IDF Vectorizer et la matrice de similarité
 with open("models/tfidf_vectorizer.pkl", "rb") as f:
-    tfidf = pickle.load(f)
+    tfidf = joblib.load(f)
 
 with open("models/cosine_sim.pkl", "rb") as f:
-    cosine_sim = pickle.load(f)
+    cosine_sim = joblib.load(f)
 
 # Charger les livres depuis la DB pour récupérer titre/id
 #session = SessionLocal()
@@ -51,7 +53,6 @@ def recommend_by_description(desc, df=df_livres, tfidf=tfidf, sim_matrix=cosine_
     desc_vec = tfidf.transform([desc])
     
     # Calculer la similarité cosinus avec tous les livres
-    from sklearn.metrics.pairwise import cosine_similarity
     sim_scores = cosine_similarity(desc_vec, sim_matrix)[0]
     
     # Trier par score décroissant

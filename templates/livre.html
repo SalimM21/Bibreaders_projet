@@ -13,79 +13,65 @@
       background-repeat: no-repeat;
       margin: 0;
       font-family: Arial, sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: flex-start;
       padding-top: 80px; /* espace sous navbar */
     }
-
-    .navbar {
-      width: 100%;
-      position: fixed;
-      top: 0;
-      left: 0;
-      z-index: 1000;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      background-color: white;
-    }
-
     .container {
       max-width: 900px;
-      width: 100%;
       background-color: white;
       padding: 20px;
       border-radius: 1rem;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
       margin: 20px auto;
     }
   </style>
 </head>
 <body>
 
-<!-- Navbar identique à home -->
-<nav class="navbar navbar-expand-lg navbar-light bg-light shadow-sm">
+<!-- Navbar -->
+<nav class="navbar navbar-expand-lg navbar-light bg-light shadow-sm fixed-top">
   <div class="container-fluid">
     <a class="navbar-brand fw-bold" href="/">📚 Bib Readers</a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
       <span class="navbar-toggler-icon"></span>
     </button>
-
     <div class="collapse navbar-collapse" id="navbarNav">
       <ul class="navbar-nav me-auto">
         <li class="nav-item"><a class="nav-link" href="/">Accueil</a></li>
         <li class="nav-item"><a class="nav-link" href="/catalogue">Catalogue</a></li>
-        <li class="nav-item"><a class="nav-link" href="/mes-emprunts">Mes emprunts</a></li>
+        <li class="nav-item"><a class="nav-link" href="/profil">Mes emprunts</a></li>
         <li class="nav-item"><a class="nav-link" href="/recommandations">Recommandations</a></li>
       </ul>
-
       {% if user %}
-      <!-- Si connecté -->
-      <span class="me-3">👤 {{ user.username }}</span>
-      <a class="btn btn-outline-danger btn-sm" href="/api/logout">Déconnexion</a>
+        <span class="me-3">👤 {{ user.username }}</span>
+        <a class="btn btn-outline-danger btn-sm" href="/api/logout">Déconnexion</a>
       {% else %}
-      <!-- Si pas connecté -->
-      <a class="btn btn-primary btn-sm me-2" href="/api/login">Se connecter</a>
-      <a class="btn btn-success btn-sm" href="/api/register">S'inscrire</a>
+        <a class="btn btn-primary btn-sm me-2" href="/api/login">Se connecter</a>
+        <a class="btn btn-success btn-sm" href="/api/register">S'inscrire</a>
       {% endif %}
     </div>
   </div>
 </nav>
 
 <div class="container mt-4">
+
+  <!-- Messages -->
   {% if request.query_params.get('success') %}
     <div class="alert alert-success">✅ Réservation réussie !</div>
   {% elif request.query_params.get('error') == 'reserved' %}
     <div class="alert alert-danger">❌ Ce livre est déjà réservé.</div>
+  {% elif request.query_params.get('error') == 'already' %}
+    <div class="alert alert-warning">⚠️ Vous avez déjà réservé ce livre.</div>
   {% elif request.query_params.get('error') == 'notfound' %}
-    <div class="alert alert-warning">⚠️ Livre non trouvé.</div>
+    <div class="alert alert-warning">⚠️ Livre ou utilisateur non trouvé.</div>
+  {% elif request.query_params.get('error') == 'notlogged' %}
+    <div class="alert alert-warning">⚠️ Vous devez être connecté pour réserver.</div>
   {% endif %}
 
   <div class="row">
     <div class="col-md-4">
-      <img src="{{ livre.image_url }}" class="img-fluid rounded" alt="{{ livre.title }}">
+      <img src="{{ livre.image_url or 'https://via.placeholder.com/150x200?text=Livre' }}" 
+           class="img-fluid rounded" alt="{{ livre.title }}">
     </div>
-
     <div class="col-md-8">
       <h2>{{ livre.title }}</h2>
       <p><strong>Description :</strong> {{ livre.description }}</p>
@@ -98,21 +84,20 @@
         {% endif %}
       </p>
 
-      <!-- Bouton réserver -->
+      <!-- Bouton Réserver -->
       {% if livre.availability %}
         {% if user %}
-        <!-- Si connecté -->
-        <form action="/api/reservations" method="POST">
-          <input type="hidden" name="livre_id" value="{{ livre.id }}">
-          <button type="submit" class="btn btn-success">📚 Réserver ce livre</button>
-        </form>
+          <form action="/api/reservations" method="POST">
+            <input type="hidden" name="id_livre" value="{{ livre.id }}">
+            <button type="submit" class="btn btn-success">📚 Réserver ce livre</button>
+          </form>
         {% else %}
-        <!-- Si pas connecté -->
-        <a href="/api/login" class="btn btn-warning">🔑 Connectez-vous pour réserver</a>
+          <a href="/api/login" class="btn btn-warning">🔑 Connectez-vous pour réserver</a>
         {% endif %}
       {% else %}
         <button class="btn btn-secondary" disabled>Réservation impossible</button>
       {% endif %}
+
     </div>
   </div>
 </div>

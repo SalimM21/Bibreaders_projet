@@ -10,7 +10,7 @@
     <h1 class="text-center mb-4">Recommandez-moi un livre</h1>
 
     <!-- Formulaire de recherche -->
-    <form method="post" action="api/recommandation-par-description">
+    <form method="post" action="/api/recommandation-par-description">
         <div class="mb-3">
             <label for="description" class="form-label">Décrivez le livre que vous cherchez…</label>
             <textarea class="form-control" id="description" name="description" rows="3" required>{{ description or '' }}</textarea>
@@ -25,14 +25,14 @@
         {% for livre in suggestions %}
         <div class="col-md-3 mb-3">
             <div class="card h-100 shadow-sm">
-                {% if livre.image_url %}
-                <img src="{{ livre.image_url }}" class="card-img-top" alt="{{ livre.titre }}">
+                {% if livre.Image_URL %}
+                <img src="{{ livre.Image_URL }}" class="card-img-top" alt="{{ livre.title }}" loading="lazy">
                 {% else %}
                 <img src="https://via.placeholder.com/150x200?text=Livre" class="card-img-top" alt="Couverture">
                 {% endif %}
                 <div class="card-body">
-                    <h5 class="card-title">{{ livre.titre }}</h5>
-                    <p class="card-text">{{ livre.description[:100] }}...</p>
+                    <h5 class="card-title">{{ livre.title }}</h5>
+                    <p class="card-text">{{ livre.Description[:100] }}...</p>
                     <a href="/livre/{{ livre.id }}" class="btn btn-outline-primary btn-sm">Voir détails</a>
                 </div>
             </div>
