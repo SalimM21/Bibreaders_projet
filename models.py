@@ -21,6 +21,14 @@ class Adherent(Base):
     reservations = relationship("Reservation", back_populates="adherent")
 
 
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String)
+    email = Column(String, unique=True, index=True)
+    password_hash = Column(String)  # mot de passe haché
+    role = Column(String)  # "admin" ou "adherent"
+
 class Livre(Base):
     __tablename__ = "livres"
     __allow_unmapped__ = True

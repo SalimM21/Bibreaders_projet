@@ -57,13 +57,20 @@ body {
     text-overflow: ellipsis;
     margin-bottom: 0.2rem;
 }
-
 </style>
 </head>
 <body>
 
+<div class="container mt-5">
 
- <div class="container mt-5">
+    <!-- -----------------------------
+         Sécurisation des variables pour éviter erreurs si non définies
+         Changement: ajout de valeurs par défaut pour page, total_pages et search
+    ----------------------------- -->
+    {% set page = page if page is defined else 1 %}
+    {% set total_pages = total_pages if total_pages is defined else 1 %}
+    {% set search = search if search is defined else '' %}
+
     <h1 class="mb-4">Catalogue des livres</h1>
 
     <!-- Barre de recherche -->
@@ -76,31 +83,34 @@ body {
 
     <!-- Cartes des livres -->
     <div class="row">
-        {% for livre in livres %}
-        <div class="col-md-3 mb-4">
-            <div class="card h-100">
-                <img src="{{ livre.image_url or '/static/images/interfaces/carte_template.png' }}" alt="{{ livre.title }}" loading="lazy">
-                <div class="card-body d-flex flex-column">
-                    <h5 class="card-title">{{ livre.title }}</h5>
-                    <p class="card-text description">{{ livre.description or 'Pas de description' }}</p>
-                    <p class="card-text"><strong>Prix :</strong> {{ livre.price or 'N/A' }} €</p>
-                    <p class="card-text"><strong>Disponibilité :</strong>
-                        {% if livre.availability_num > 0 %}
-                            Disponible ({{ livre.availability_num }} ex.)
-                        {% else %}
-                            Réservé
-                        {% endif %}
-                    </p>
-                    <!--<p class="card-text"><strong>Note :</strong> {{ livre.rating or 'N/A' }}</p>
-                    <a href="/reserver/{{ livre.id }}" class="btn btn-success mt-auto">Réserver</a>-->
-                 <a href="/livre/{{ livre.id }}" class="btn btn-primary btn-sm mt-2">Voir détails</a>
+        {% if livres|length == 0 %}
+            <!-- Changement: message si aucun livre trouvé -->
+            <p>Aucun livre trouvé.</p>
+        {% else %}
+            {% for livre in livres %}
+            <div class="col-md-3 mb-4">
+                <div class="card h-100">
+                    <img src="{{ livre.image_url or '/static/images/interfaces/carte_template.png' }}" alt="{{ livre.title }}" loading="lazy">
+                    <div class="card-body d-flex flex-column">
+                        <h5 class="card-title">{{ livre.title }}</h5>
+                        <p class="card-text description">{{ livre.description or 'Pas de description' }}</p>
+                        <p class="card-text"><strong>Prix :</strong> {{ livre.price or 'N/A' }} €</p>
+                        <p class="card-text"><strong>Disponibilité :</strong>
+                            {% if livre.availability_num > 0 %}
+                                Disponible ({{ livre.availability_num }} ex.)
+                            {% else %}
+                                Réservé
+                            {% endif %}
+                        </p>
+                        <a href="/livre/{{ livre.id }}" class="btn btn-primary btn-sm mt-2">Voir détails</a>
+                    </div>
                 </div>
             </div>
-        </div>
-        {% endfor %}
+            {% endfor %}
+        {% endif %}
     </div>
 
-    <!-- Pagination simple -->
+    <!-- Pagination sécurisée -->
     <nav class="d-flex justify-content-center mt-4">
         <ul class="pagination">
             {% if page > 1 %}
@@ -115,7 +125,9 @@ body {
             {% endif %}
         </ul>
     </nav>
+
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

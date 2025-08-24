@@ -1,28 +1,45 @@
 from datetime import date, datetime, timedelta
-from fastapi import Depends, FastAPI, Form, HTTPException, Request,Query
+from typing import List
+from urllib import request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request, Query, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-#from auth.jwt_handler import create_access_token
 from database import SessionLocal, engine, Base
-from models import Adherent, Livre, Emprunt, Reservation
+from models import Adherent, Livre, Emprunt, Reservation,User
 from starlette.middleware.sessions import SessionMiddleware
 import models
-
+from schemas import AdherentCreate, LivreBase, LivreCreate, StatistiquesResponse
+import schemas
+import secrets
+from routes import auth, admin, adherent, livres, home, recommendation, reservation
 
 
 
 app = FastAPI()
 
 # Ajoute le middleware de session avec une clé secrète
-app.add_middleware(SessionMiddleware, secret_key="une_cle_secrete_tres_complexe")
+secret_key = secrets.token_hex(32)
+app.add_middleware(SessionMiddleware, secret_key=secret_key)
+
+# Inclure les routeurs
+app.include_router(auth.router)
+app.include_router(admin.router)
+app.include_router(adherent.router)
+app.include_router(livres.router)
+app.include_router(home.router)
+app.include_router(recommendation.router)
+app.include_router(reservation.router)
 
 # Créer les tables si elles n'existent pas
 Base.metadata.create_all(bind=engine)
 
+# Configuration du contexte de hachage des mots de passe
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# Configuration des templates Jinja2
 templates = Jinja2Templates(directory="templates")
 
 # Dépendance pour obtenir la session DB
@@ -31,508 +48,491 @@ def get_db():
     try:
         yield db
     finally:
-        db.close()
-
-
-# -----------------------------
-# Pages HTML
-# -----------------------------
-#Inscription
-
-@app.get("/api/register")
-def show_register(request: Request):
-    return templates.TemplateResponse("inscription.html", {"request": request})
-
-#connection
-@app.get("/api/login")
-def show_login(request: Request):
-    return templates.TemplateResponse("login.html", {"request": request})
-
-
-# ----------------------------------- Route Home avec pagination ----------------------------------------------
-@app.get("/", response_class=HTMLResponse)
-def home(
-    request: Request,
-    page: int = Query(1, ge=1),  # numéro de page (par défaut 1)
-    db: Session = Depends(get_db)
-):
-    livres_par_page = 12  # nombre de livres par page
-
-    # Compter le total des livres
-    total_livres = db.query(Livre).count()
-
-    # Calcul du nombre total de pages
-    total_pages = (total_livres + livres_par_page - 1) // livres_par_page
-
-    # Décalage pour pagination
-    offset = (page - 1) * livres_par_page
-
-    # Récupérer les livres paginés
-    livres = db.query(Livre).offset(offset).limit(livres_par_page).all()
-
-    return templates.TemplateResponse("home.html", {
-        "request": request,
-        "livres": livres,
-        "page": page,
-        "total_pages": total_pages,
-        "search":""
-    })
-
-
-# -----------------------------
-# Routes API
-# -----------------------------Inscription---------------------------------------------------
-
-@app.post("/api/register")
-def register_adherent(
-    nom: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),
-    db: Session = Depends(get_db)
-):
-    # Vérifier si l'email existe déjà
-    existing_user = db.query(Adherent).filter(Adherent.email == email).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Email déjà utilisé")
-
-    hashed_password = pwd_context.hash(password)
-    adherent = Adherent(nom=nom, email=email, password_hash=hashed_password)
-    db.add(adherent)
-    db.commit()
-    db.refresh(adherent)
-    return RedirectResponse(url="/api/login", status_code=302)
-
-from fastapi import Form, Request
-from fastapi.responses import RedirectResponse
-
-@app.post("/api/login")
-def login(request: Request, email: str = Form(...), password: str = Form(...), db: Session = Depends(get_db)):
-    # Vérifier l'utilisateur
-    user = db.query(Adherent).filter(Adherent.email == email).first()
-    if not user or not pwd_context.verify(password, user.password_hash):
-        return templates.TemplateResponse(
-            "login.html",
-            {"request": request, "error": "Identifiants incorrects"}
-        )
-
-    # Stocker l'email dans la session
-    request.session["email"] = user.email
-
-    # Redirection vers la page d'accueil
-    return RedirectResponse(url="/profil", status_code=303)
-
-#-------------------------------------------------Route API pour récupérer les livres (avec recherche)--------------------------------------------
-
-@app.get("/api/livres")
-def get_livres(search: str = Query(default=""), db: Session = Depends(get_db)):
-    query = db.query(Livre)
-    if search:
-        query = query.filter(Livre.title.ilike(f"%{search}%")).limit(4)  # Limite à 20 résultats
-    livres = query.all()
-
-    # Retourne les livres en JSON
-    return [
-        {
-            "id": livre.id,
-            "title": livre.title,
-            "description": livre.description,
-            "price": float(livre.price) if livre.price else None,
-            "availability": livre.availability,
-            "availability_num": livre.availability_num,
-            "image_url": livre.image_url,
-            "rating": livre.rating
-        }
-        for livre in livres
-    ]
-
-
-#------------------------------------------Route FastAPI pour la page catalogue--------------------------------------
-
-PER_PAGE = 20  # livres par page
-
-@app.get("/catalogue", response_class=HTMLResponse)
-def catalogue(
-    request: Request,
-    page: int = 1,
-    search: str = "",
-    db: Session = Depends(get_db)
-):
-    query = db.query(models.Livre)
-
-    if search:
-        # Filtrer par titre et retourner seulement le premier résultat correspondant
-        query = query.filter(models.Livre.title.ilike(f"%{search}%"))
-        total_livres = query.count()
-        total_pages = 1  # Une seule page pour la recherche
-        livres = query.limit(1).all()  # retourne uniquement 1 livre
-    else:
-        # Pagination normale si pas de recherche
-        total_livres = query.count()
-        total_pages = (total_livres + PER_PAGE - 1) // PER_PAGE
-        livres = query.offset((page - 1) * PER_PAGE).limit(PER_PAGE).all()
-
-    return templates.TemplateResponse(
-        "catalogue.html",
-        {
-            "request": request,
-            "livres": livres,
-            "search": search,
-            "page": page,
-            "total_pages": total_pages
-        }
-    )
-
-#--------------------------------------------------------Route pour reserver un livre-----------------------------------
-
-#-----------------------------------Route pour afficher les détails d'un livre(bouton detail)---------------------------------------
-@app.get("/livre/{livre_id}", response_class=HTMLResponse)
-def lire_livre(request: Request, livre_id: int, db: Session = Depends(get_db)):
-    # Récupérer le livre depuis la base
-    livre = db.query(Livre).filter(Livre.id == livre_id).first()
-    if not livre:
-        raise HTTPException(status_code=404, detail="Livre non trouvé")
-    
-    # Retourner le template livre.html avec le livre
-    return templates.TemplateResponse("livre.html", {"request": request, "livre": livre})
-
-from fastapi.responses import RedirectResponse
-
-@app.get("/livre/")
-def livre_default():
-    # Rediriger vers le catalogue
-    return RedirectResponse(url="/catalogue")
+       db.close()
 
 
 #----------------------------------------------Route pour reserver un livre---------------------------------------
 
 #fonction pour obtenir l'utilisateur actuel (pour test, retourne le premier utilisateur)
-def get_current_user(db: Session = Depends(get_db)) -> Adherent:
-    # Ici tu retournes juste le premier utilisateur pour test
-    user = db.query(Adherent).first()#tu peux changer par exemple en db.query(Adherent).filter(Adherent.username == "test").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Pas d'utilisateur trouvé")
-    return user
+# '''
+# def get_current_user(db: Session = Depends(get_db)) -> Adherent:
+#     # Ici tu retournes juste le premier utilisateur pour test
+#     user = db.query(Adherent).first()#tu peux changer par exemple en db.query(Adherent).filter(Adherent.username == "test").first()
+#     if not user:
+#         raise HTTPException(status_code=404, detail="Pas d'utilisateur trouvé")
+#     return user
 
 
-#route pour reserver un livre
-@app.post("/reserver/{livre_id}")
-def reserver_livre(
-    livre_id: int,
-    db: Session = Depends(get_db),
-    current_user: Adherent = Depends(get_current_user)
-):
-    livre = db.query(Livre).filter(Livre.id == livre_id).first()
-    if not livre:
-        return RedirectResponse(url=f"/livre/{livre_id}?error=notfound", status_code=303)
+# #route pour reserver un livre
+# @app.post("/reserver/{livre_id}")
+# def reserver_livre(
+#     livre_id: int,
+#     db: Session = Depends(get_db),
+#     current_user: Adherent = Depends(get_current_user)
+# ):
+#     livre = db.query(Livre).filter(Livre.id == livre_id).first()
+#     if not livre:
+#         return RedirectResponse(url=f"/livre/{livre_id}?error=notfound", status_code=303)
 
-    if not livre.availability:
-        return RedirectResponse(url=f"/livre/{livre_id}?error=reserved", status_code=303)
+#     if not livre.availability:
+#         return RedirectResponse(url=f"/livre/{livre_id}?error=reserved", status_code=303)
 
-    # Marquer le livre comme réservé
-    livre.availability = False
+#     # Marquer le livre comme réservé
+#     livre.availability = False
 
-    # Créer la réservation
-    reservation = Reservation(
-        id_adherent=current_user.id,
-        id_livre=livre.id,
-        date_reservation=datetime.utcnow(),
-        statut="réservé"
-    )
-    db.add(reservation)
-    db.commit()
+#     # Créer la réservation
+#     reservation = Reservation(
+#         id_adherent=current_user.id,
+#         id_livre=livre.id,
+#         date_reservation=datetime.utcnow(),
+#         statut="réservé"
+#     )
+#     db.add(reservation)
+#     db.commit()
 
-    return RedirectResponse(url=f"/profil?success=1", status_code=303)
+#     return RedirectResponse(url=f"/profil?success=1", status_code=303)
 
 
-#----------------------------------------------Route pour afficher les réservations d'un utilisateur---------------------------------------
+# #----------------------------------------------Route pour afficher les réservations d'un utilisateur---------------------------------------
 
-@app.post("/api/reservations")
-def reserver_livre(
-    request: Request,
-    id_livre: int = Form(...),
-    db: Session = Depends(get_db)
-):
-    # Vérifier si l'utilisateur est connecté
-    email = request.session.get("email")
-    if not email:
-        return RedirectResponse(url=f"/livre/{id_livre}?error=notlogged", status_code=303)
+# @app.post("/api/reservations")
+# def reserver_livre(
+#     request: Request,
+#     id_livre: int = Form(...),
+#     db: Session = Depends(get_db)
+# ):
+#     # Vérifier si l'utilisateur est connecté
+#     email = request.session.get("email")
+#     if not email:
+#         return RedirectResponse(url=f"/livre/{id_livre}?error=notlogged", status_code=303)
 
-    # Récupérer l'adhérent
-    adherent = db.query(Adherent).filter(Adherent.email == email).first()
-    if not adherent:
-        return RedirectResponse(url=f"/livre/{id_livre}?error=notfound", status_code=303)
+#     # Récupérer l'adhérent
+#     adherent = db.query(Adherent).filter(Adherent.email == email).first()
+#     if not adherent:
+#         return RedirectResponse(url=f"/livre/{id_livre}?error=notfound", status_code=303)
 
-    # Récupérer le livre
-    livre = db.query(Livre).filter(Livre.id == id_livre).first()
-    if not livre:
-        return RedirectResponse(url=f"/livre/{id_livre}?error=notfound", status_code=303)
+#     # Récupérer le livre
+#     livre = db.query(Livre).filter(Livre.id == id_livre).first()
+#     if not livre:
+#         return RedirectResponse(url=f"/livre/{id_livre}?error=notfound", status_code=303)
     
-    if not livre.availability:
-        return RedirectResponse(url=f"/livre/{id_livre}?error=reserved", status_code=303)
+#     if not livre.availability:
+#         return RedirectResponse(url=f"/livre/{id_livre}?error=reserved", status_code=303)
 
-    # Vérifier si l'adhérent a déjà réservé ce livre
-    existing_emprunt = db.query(Emprunt).filter(
-        Emprunt.id_adherent == adherent.id,
-        Emprunt.id_livre == id_livre
-    ).first()
-    if existing_emprunt:
-        return RedirectResponse(url=f"/livre/{id_livre}?error=already", status_code=303)
+#     # Vérifier si l'adhérent a déjà réservé ce livre
+#     existing_emprunt = db.query(Emprunt).filter(
+#         Emprunt.id_adherent == adherent.id,
+#         Emprunt.id_livre == id_livre
+#     ).first()
+#     if existing_emprunt:
+#         return RedirectResponse(url=f"/livre/{id_livre}?error=already", status_code=303)
 
-    # Créer l'emprunt
-    emprunt = Emprunt(
-        id_adherent=adherent.id,
-        id_livre=id_livre,
-        date_emprunt=datetime.utcnow(),
-        date_retour_prevue=datetime.utcnow() + timedelta(days=7),
-        statut="En cours"
-    )
-    db.add(emprunt)
+#     # Créer l'emprunt
+#     emprunt = Emprunt(
+#         id_adherent=adherent.id,
+#         id_livre=id_livre,
+#         date_emprunt=datetime.utcnow(),
+#         date_retour_prevue=datetime.utcnow() + timedelta(days=7),
+#         statut="En cours"
+#     )
+#     db.add(emprunt)
 
-    # Marquer le livre comme réservé
-    livre.availability = False
+#     # Marquer le livre comme réservé
+#     livre.availability = False
 
-    db.commit()
-    db.refresh(emprunt)
-    db.refresh(livre)
+#     db.commit()
+#     db.refresh(emprunt)
+#     db.refresh(livre)
 
-    # Redirection vers la page du livre avec message de succès
-    return RedirectResponse(url=f"/livre/{id_livre}?success=1", status_code=303)
+#     # Redirection vers la page du livre avec message de succès
+#     return RedirectResponse(url=f"/livre/{id_livre}?success=1", status_code=303)
 
-# ---------------------------
-# Route Profil avec emprunts
-# ---------------------------
-@app.get("/profil", response_class=HTMLResponse)
-def page_profil(request: Request, db: Session = Depends(get_db)):
-    email = request.session.get("email")
-    if not email:
-        return RedirectResponse(url="/api/login", status_code=303)
-    adherent = db.query(Adherent).filter(Adherent.email == email).first()
-    if not adherent:
-        return RedirectResponse(url="/api/login", status_code=303)
-    emprunts = db.query(Emprunt).filter(Emprunt.id_adherent == adherent.id).all()
-    result = []
-    for e in emprunts:
-        statut = "En retard" if e.date_retour_prevue < datetime.utcnow() else "À temps"
-        result.append({
-            "titre": e.livres.title,
-            "date_emprunt": e.date_emprunt.strftime("%Y-%m-%d"),
-            "date_retour_prevue": e.date_retour_prevue.strftime("%Y-%m-%d"),
-            "statut": statut
-        })
-    return templates.TemplateResponse("profil.html", {
-        "request": request,
-        "adherent": adherent,
-        "emprunts": result
-    })
-#----------------------------------------------Route FastAPI pour la page de mes emprunts---------------------------------------
-# ----- ROUTE : récupérer les emprunts -----
-@app.get("/api/mes-emprunts/{id_adherent}")
-def get_emprunts(id_adherent: int, db: Session = Depends(get_db)):
-    emprunts = db.query(Emprunt).filter(Emprunt.id_adherent == id_adherent).all()
-    result = []
-    for e in emprunts:
-        # Vérifier si retard
-        statut = "En retard" if e.date_retour_prevue < datetime.utcnow() else "À temps"
-        result.append({
-            "titre": e.livres.title,
-            "date_emprunt": e.date_emprunt.strftime("%Y-%m-%d"),
-            "date_retour_prevue": e.date_retour_prevue.strftime("%Y-%m-%d"),
-            "statut": statut
-        })
-    return result
-
-
-#----------------------------------------------Route FastAPI pour la page de profil---------------------------------------
-
-@app.get("/profil/{id_adherent}", response_class=HTMLResponse)
-def profil(id_adherent: int, request: Request, db: Session = Depends(get_db)):
-    adherent = db.query(Adherent).filter(Adherent.id == id_adherent).first()
-    emprunts = db.query(Emprunt).filter(Emprunt.id_adherent == id_adherent).all()
-    return templates.TemplateResponse("profil.html", {
-        "request": request,
-        "adherent": adherent,
-        "emprunts": emprunts,
-        "now": datetime.utcnow()
-    })
-
-#----------------------------------------------Route FastAPI pour la page de recommandations---------------------------------------
-from recommendation import get_recommendations, recommend_by_description
-
-@app.get("/recommandation-par-description", response_class=HTMLResponse)
-def page_recommandation(request: Request):
-    return templates.TemplateResponse("recommandation-par-description.html", {"request": request})
-
-@app.post("/api/recommandation-par-description", response_class=HTMLResponse)
-def recommandation_par_description(
-    request: Request,
-    description: str = Form(...)
-):
-    # Obtenir les suggestions
-    suggestions = recommend_by_description(description)
-
-    # Rendre la même page avec les résultats
-    return templates.TemplateResponse("recommandation-par-description.html", {
-        "request": request,
-        "suggestions": suggestions,
-        "description": description
-    })
-
-#----------------------------------------------Route FastAPI pour la page de gestion des adherents---------------------------------------
-
-# Affichage des adhérents
-@app.get("/admin/gestion-adherents")
-def gestion_adherents(request: Request, db: Session = Depends(get_db)):
-    adherents = db.query(Adherent).all()
-    return templates.TemplateResponse("admin/gestion-adherents.html", {"request": request, "adherents": adherents})
-
-# Modifier un adhérent (affiche un formulaire)
-@app.get("/modify/{id}")
-def show_modify_form(id: int, request: Request, db: Session = Depends(get_db)):
-    adherent = db.query(Adherent).filter(Adherent.id == id).first()
-    return templates.TemplateResponse("admin/gestion-adherents.html", {"request": request, "adherent": adherent})
-
-@app.post("/modify/{id}")
-def modify_adherent(id: int, nom: str = Form(...), email: str = Form(...), db: Session = Depends(get_db)):
-    adherent = db.query(Adherent).filter(Adherent.id == id).first()
-    if adherent:
-        adherent.nom = nom
-        adherent.email = email
-        db.commit()
-    return RedirectResponse("/admin/gestion-adherents", status_code=303)
-
-# Suspendre un adhérent
-@app.get("/delete/{id}")
-def suspend_adherent(id: int, db: Session = Depends(get_db)):
-    adherent = db.query(Adherent).filter(Adherent.id == id).first()
-    if adherent:
-        adherent.statut = "Suspendu"
-        db.commit()
-    return RedirectResponse("/admin/gestion-adherents", status_code=303)
-
-#======-------------ajouter un adherent
-@app.get("/add-adherent", response_class=HTMLResponse)
-def page_add_adherent(request: Request):
-    return templates.TemplateResponse("admin/add-adherent.html", {"request": request})
+# # ---------------------------
+# # Route Profil avec emprunts
+# # ---------------------------
+# @app.get("/profil", response_class=HTMLResponse)
+# def page_profil(request: Request, db: Session = Depends(get_db)):
+#     email = request.session.get("email")
+#     if not email:
+#         return RedirectResponse(url="/api/login", status_code=303)
+#     adherent = db.query(Adherent).filter(Adherent.email == email).first()
+#     if not adherent:
+#         return RedirectResponse(url="/api/login", status_code=303)
+#     emprunts = db.query(Emprunt).filter(Emprunt.id_adherent == adherent.id).all()
+#     result = []
+#     for e in emprunts:
+#         statut = "En retard" if e.date_retour_prevue < datetime.utcnow() else "À temps"
+#         result.append({
+#             "titre": e.livres.title,
+#             "date_emprunt": e.date_emprunt.strftime("%Y-%m-%d"),
+#             "date_retour_prevue": e.date_retour_prevue.strftime("%Y-%m-%d"),
+#             "statut": statut
+#         })
+#     return templates.TemplateResponse("profil.html", {
+#         "request": request,
+#         "adherent": adherent,
+#         "emprunts": result
+#     })
+# #----------------------------------------------Route FastAPI pour la page de mes emprunts---------------------------------------
+# # ----- ROUTE : récupérer les emprunts -----
+# @app.get("/api/mes-emprunts/{id_adherent}")
+# def get_emprunts(id_adherent: int, db: Session = Depends(get_db)):
+#     emprunts = db.query(Emprunt).filter(Emprunt.id_adherent == id_adherent).all()
+#     result = []
+#     for e in emprunts:
+#         # Vérifier si retard
+#         statut = "En retard" if e.date_retour_prevue < datetime.utcnow() else "À temps"
+#         result.append({
+#             "titre": e.livres.title,
+#             "date_emprunt": e.date_emprunt.strftime("%Y-%m-%d"),
+#             "date_retour_prevue": e.date_retour_prevue.strftime("%Y-%m-%d"),
+#             "statut": statut
+#         })
+#     return result
 
 
-@app.post("/api/adherents")
-def creer_adherent(
-    nom: str = Form(...),
-    email: str = Form(...),
-    password: str = Form(...),   #  récupéré depuis formulaire
-    db: Session = Depends(get_db)
-):
-    # Hachage du mot de passe
-    hashed_password = pwd_context.hash(password)
+# #----------------------------------------------Route FastAPI pour la page de profil---------------------------------------
 
-    nouvel_adherent = Adherent(
-        nom=nom,
-        email=email,
-        password_hash=hashed_password,
-        role="adherent"
-    )
-    db.add(nouvel_adherent)
-    db.commit()
-    db.refresh(nouvel_adherent)
-    return {"message": "Adhérent ajouté", "id": nouvel_adherent.id}
-
-#-----------------------------------------------------------------route gestion des emprunts
-@app.get("/admin/emprunts", response_class=HTMLResponse)
-def page_emprunts(request: Request, db: Session = Depends(get_db)):
-    adherents = db.query(Adherent).all()
-    livres = db.query(Livre).all()
-    emprunts = db.query(Emprunt).filter(Emprunt.date_retour_effectif == None).all()  # emprunts en cours
-    return templates.TemplateResponse("admin/emprunts.html", {
-        "request": request,
-        "adherents": adherents,
-        "livres": livres,
-        "emprunts": emprunts
-    })
+# @app.get("/profil/{id_adherent}", response_class=HTMLResponse)
+# def profil(id_adherent: int, request: Request, db: Session = Depends(get_db)):
+#     adherent = db.query(Adherent).filter(Adherent.id == id_adherent).first()
+#     emprunts = db.query(Emprunt).filter(Emprunt.id_adherent == id_adherent).all()
+#     return templates.TemplateResponse("profil.html", {
+#         "request": request,
+#         "adherent": adherent,
+#         "emprunts": emprunts,
+#         "now": datetime.utcnow()
+#     })'''
 
 
-@app.post("/api/emprunts")
-def creer_emprunt(
-    id_adherent: int = Form(...),
-    id_livre: int = Form(...),
-    db: Session = Depends(get_db)
-):
-    livre = db.query(Livre).filter(Livre.id == id_livre).first()
-    if not livre or livre.stock <= 0:
-        return {"error": "Livre indisponible"}
+# #----------------------------------------------Route FastAPI pour la page de gestion des adherents---------------------------------------
+# # 1️⃣ Route pour obtenir tous les adhérents
 
-    # Créer l'emprunt
-    nouvel_emprunt = Emprunt(
-        id_adherent=id_adherent,
-        id_livre=id_livre,
-        date_emprunt=datetime.utcnow(),
-        date_retour_prevue=datetime.utcnow() + timedelta(days=14)
-    )
-    db.add(nouvel_emprunt)
+# '''
+# @app.get("/admin/gestion-adherents", response_class=HTMLResponse)
+# def get_gestion_adherents_page(request: Request, db: Session = Depends(get_db)):
+#     # Récupérer tous les adhérents pour les passer au template
+#     adherents = db.query(Adherent).all()
+#     return templates.TemplateResponse(
+#         "admin/gestion-adherents.html", 
+#         {
+#             "request": request, 
+#             "adherents": adherents
+#         }
+#     )
 
-    # Diminuer stock
-    livre.stock -= 1
+# # 1️⃣ API pour modifier un adhérent
+# # --------------------------------------------
+# # Utilisation de la méthode PUT pour une modification
 
-    db.commit()
-    return {"message": "Emprunt enregistré avec succès"}
-
-@app.post("/api/retours")
-def retour_emprunt(
-    id_emprunt: int = Form(...),
-    db: Session = Depends(get_db)
-):
-    emprunt = db.query(Emprunt).filter(Emprunt.id == id_emprunt).first()
-    if not emprunt:
-        return {"error": "Emprunt introuvable"}
-
-    # Marquer le retour
-    emprunt.date_retour_effectif = datetime.utcnow()
-
-    # Augmenter stock du livre
-    livre = db.query(Livre).filter(Livre.id == emprunt.id_livre).first()
-    if livre:
-        livre.stock += 1
-
-    db.commit()
-    return {"message": "Retour enregistré avec succès"}
-#---------------------------------ROUTES GESTION ADHERENTS ------------------------------------------------------
+# @app.put("/api/adherents/modify/{adherent_id}")
+# def modify_adherent(adherent_id: int, nom: str, email: str, db: Session = Depends(get_db)):
+#     """
+#     Modifie le nom et l'email d'un adhérent par son ID.
+#     """
+#     adherent = db.query(models.Adherent).filter(models.Adherent.id == adherent_id).first()
+#     if not adherent:
+#         raise HTTPException(status_code=404, detail="Adhérent non trouvé")
+    
+#     adherent.nom = nom
+#     adherent.email = email
+    
+#     db.commit()
+#     db.refresh(adherent)
+    
+#     return {"message": f"Adhérent ID {adherent_id} modifié avec succès."}
 
 
-# 🔹 Route pour récupérer tous les adhérents
-@app.get("/api/adherent")
-def get_adherents(db: Session = Depends(get_db)):
-    adherents = db.query(Adherent).all()
-    result = []
-    for a in adherents:
-        result.append({
-            "id": a.id,
-            "nom": a.nom,
-            # si tu as un champ prénom, tu peux l'ajouter ici
-            # "prenom": a.prenom
-        })
-    return result
+# # --------------------------------------------
+# # 2️⃣ API pour suspendre ou réactiver un adhérent
+# # --------------------------------------------
+# # Utilisation de la méthode POST pour une action
+# @app.post("/api/adherents/suspend/{adherent_id}")
+# def suspend_adherent(adherent_id: int, db: Session = Depends(get_db)):
+#     """
+#     Change le rôle d'un adhérent entre 'adherent' et 'suspendu'.
+#     """
+#     adherent = db.query(models.Adherent).filter(models.Adherent.id == adherent_id).first()
+#     if not adherent:
+#         raise HTTPException(status_code=404, detail="Adhérent non trouvé")
+    
+#     # Inverser le rôle de l'adhérent
+#     if adherent.role == "adherent":
+#         adherent.role = "suspendu"
+#     else:
+#         adherent.role = "adherent"
+    
+#     db.commit()
+#     db.refresh(adherent)
+    
+#     return {"message": f"Statut de l'adhérent ID {adherent_id} mis à jour en '{adherent.role}'."}
 
-# 🔹 Route pour récupérer les livres disponibles (stock > 0)
-@app.get("/api/livres-disponibles")
-def get_livres_disponibles(db: Session = Depends(get_db)):
-    livres = db.query(Livre).filter(Livre.availability_num > 0).all()
-    result = []
-    for l in livres:
-        result.append({
-            "id": l.id,
-            "title": l.title,
-            "stock": l.availability_num
-        })
-    return result
+# # --------------------------------------------
+# # 3️⃣ API pour supprimer (désactiver) un adhérent
+# # --------------------------------------------
+# # Utilisation de la méthode DELETE pour la suppression logique
+# @app.delete("/api/adherents/delete/{adherent_id}")
+# def delete_adherent(adherent_id: int, db: Session = Depends(get_db)):
+#     """
+#     "Supprime" logiquement un adhérent en changeant son rôle en 'supprimé'.
+#     """
+#     adherent = db.query(models.Adherent).filter(models.Adherent.id == adherent_id).first()
+#     if not adherent:
+#         raise HTTPException(status_code=404, detail="Adhérent non trouvé")
+    
+#     adherent.role = "supprimé"
+    
+#     db.commit()
+#     db.refresh(adherent)
+    
+#     return {"message": f"Adhérent ID {adherent_id} a été logiquement supprimé (rôle 'supprimé')."}
 
-#  Route pour récupérer les emprunts en cours
-@app.get("/api/emprunts-en-cours")
-def get_emprunts_en_cours(db: Session = Depends(get_db)):
-    emprunts = db.query(Emprunt).filter(Emprunt.date_retour_effectif == None).all()
-    result = []
-    for e in emprunts:
-        result.append({
-            "id": e.id,
-            "livre_title": e.livre.title,
-            "adherent_nom": e.adherent.nom
-        })
-    return result
+# # --------------------------------------------
+# # 4️⃣ API pour obtenir un adhérent par son ID
+# # --------------------------------------------
+# @app.get("/api/adherents/{adherent_id}")
+# def get_adherent(adherent_id: int, db: Session = Depends(get_db)):
+#     """
+#     Récupère les informations d'un adhérent par son ID.
+#     """
+#     adherent = db.query(models.Adherent).filter(models.Adherent.id == adherent_id).first()
+#     if not adherent:
+#         raise HTTPException(status_code=404, detail="Adhérent non trouvé")
+    
+#     return adherent
+
+
+
+
+
+# #-----------------------------------------------------------------route gestion des emprunts
+# #-----------------------------------------------
+# # Route 1️⃣ : Affiche la page HTML pour la gestion des emprunts
+# @app.get("/admin/emprunts", response_class=HTMLResponse)
+# def page_emprunts(request: Request, db: Session = Depends(get_db)):
+#     """
+#     Affiche la page HTML en passant les données directement au template.
+#     Cette approche est simple, mais pour une API, il est souvent préférable de laisser
+#     le frontend faire des appels asynchrones.
+#     """
+#     adherents = db.query(Adherent).all()
+#     livres = db.query(Livre).filter(Livre.availability_num > 0).all()
+#     emprunts = db.query(Emprunt).filter(Emprunt.date_retour_effectif == None).all()
+
+#     return templates.TemplateResponse("admin/emprunts.html", {
+#         "request": request,
+#         "adherents": adherents,
+#         "livres": livres,
+#         "emprunts": emprunts
+#     })
+
+# # 1️⃣ Page HTML pour la gestion des emprunts
+# # --------------------------------------------
+# @app.get("/admin/emprunts", response_class=HTMLResponse)
+# def page_emprunts(request: Request, db: Session = Depends(get_db)):
+#     adherents = db.query(Adherent).all()
+#     livres = db.query(Livre).filter(Livre.availability_num > 0).all()
+#     emprunts = db.query(Emprunt).filter(Emprunt.date_retour_effectif == None).all()
+
+#     return templates.TemplateResponse("admin/emprunts.html", {
+#         "request": request,
+#         "adherents": adherents,
+#         "livres": livres,
+#         "emprunts": emprunts
+#     })
+
+# # --------------------------------------------
+# # 2️⃣ API pour enregistrer un nouvel emprunt
+# # --------------------------------------------
+# @app.post("/api/emprunts")
+# def creer_emprunt(
+#     adherent_id: int = Form(...),
+#     livre_id: int = Form(...),
+#     db: Session = Depends(get_db)
+# ):
+#     livre = db.query(Livre).filter(Livre.id == livre_id).first()
+#     if not livre or livre.availability_num <= 0:
+#         raise HTTPException(status_code=400, detail="Livre indisponible")
+
+#     nouvel_emprunt = Emprunt(
+#         id_adherent=adherent_id,
+#         id_livre=livre_id,
+#         date_emprunt=datetime.utcnow(),
+#         date_retour_prevue=datetime.utcnow() + timedelta(days=14)
+#     )
+#     db.add(nouvel_emprunt)
+#     livre.availability_num -= 1
+#     db.commit()
+#     db.refresh(nouvel_emprunt)
+
+#     return {"message": "Emprunt enregistré avec succès"}
+
+# # --------------------------------------------
+# # 3️⃣ API pour enregistrer un retour
+# # --------------------------------------------
+# @app.post("/api/retours")
+# def retour_emprunt(
+#     emprunt_id: int = Form(...),
+#     db: Session = Depends(get_db)
+# ):
+#     emprunt = db.query(Emprunt).filter(Emprunt.id == emprunt_id).first()
+#     if not emprunt:
+#         raise HTTPException(status_code=404, detail="Emprunt introuvable")
+
+#     if emprunt.date_retour_effectif is not None:
+#         raise HTTPException(status_code=400, detail="Cet emprunt a déjà été retourné")
+
+#     emprunt.date_retour_effectif = datetime.utcnow()
+#     livre = db.query(Livre).filter(Livre.id == emprunt.id_livre).first()
+#     if livre:
+#         livre.availability_num += 1
+
+#     db.commit()
+#     return {"message": "Retour enregistré avec succès"}
+
+# # --------------------------------------------
+# # 4️⃣ API pour récupérer les adhérents
+# # --------------------------------------------
+# @app.get("/api/adherents")
+# def get_adherents(db: Session = Depends(get_db)):
+#     adherents = db.query(Adherent).all()
+#     return [{"id": a.id, "nom": a.nom} for a in adherents]
+
+# # --------------------------------------------
+# # 5️⃣ API pour récupérer les livres disponibles
+# # --------------------------------------------
+# @app.get("/api/livres-disponibles")
+# def get_livres_disponibles(db: Session = Depends(get_db)):
+#     livres = db.query(Livre).filter(Livre.availability_num > 0).all()
+#     return [{"id": l.id, "title": l.title, "availability_num": l.availability_num} for l in livres]
+
+# # --------------------------------------------
+# # 6️⃣ API pour récupérer les emprunts en cours
+# # --------------------------------------------
+# @app.get("/api/emprunts-en-cours")
+# def get_emprunts_en_cours(db: Session = Depends(get_db)):
+#     emprunts = db.query(Emprunt).filter(Emprunt.date_retour_effectif == None).all()
+    
+#     return [{
+#         "id": e.id,
+#         "livre_title": e.livre.title,
+#         "adherent_nom": e.adherent.nom
+#     } for e in emprunts]
+
+# # --------------------------------------------
+# # 7️⃣ API pour consulter un livre par son ID
+# # --------------------------------------------
+# @app.get("/api/livres/{livre_id}")
+# def get_livre_by_id(livre_id: int, db: Session = Depends(get_db)):
+#     livre = db.query(Livre).filter(Livre.id == livre_id).first()
+#     if not livre:
+#         raise HTTPException(status_code=404, detail="Livre non trouvé")
+    
+#     return {
+#         "id": livre.id,
+#         "title": livre.title,
+#         "description": livre.description,
+#         "availability_num": livre.availability_num
+#     }
+
+# # 🆕 Route ajoutée pour les emprunts d'un adhérent spécifique
+# @app.get("/api/emprunts/adherent/{adherent_id}")
+# def get_emprunts_by_adherent(adherent_id: int, db: Session = Depends(get_db)):
+#     """
+#     Récupère la liste des emprunts pour un adhérent donné.
+#     """
+#     emprunts = db.query(Emprunt).filter(Emprunt.id_adherent == adherent_id).all()
+#     return [{
+#         "id": e.id,
+#         "livre_title": e.livre.title,
+#         "date_emprunt": e.date_emprunt,
+#         "date_retour_prevue": e.date_retour_prevue,
+#         "date_retour_effectif": e.date_retour_effectif
+#     } for e in emprunts]'''
+
+
+
+
+
+# # -----------------------
+# # ROUTES POUR LES LIVRES
+# # -----------------------
+# '''
+# @app.get("/admin/statistiques", response_class=HTMLResponse, summary="Page d'administration des statistiques")
+# def admin_stats_page(request: Request):
+#     return templates.TemplateResponse("admin/statistiques.html", {"request": request})
+
+# @app.get("/admin/gestion-livres", response_class=HTMLResponse, summary="Page d'administration des livres")
+# def admin_books_page(request: Request):
+#     return templates.TemplateResponse("admin/gestion-livres.html", {"request": request})
+
+# # -------------------------
+# # Routes API Livres
+# # -------------------------
+# @app.get("/api/livres", response_model=List[schemas.LivreResponse], summary="Récupérer tous les livres")
+# def get_livres(db: Session = Depends(get_db)):
+#     return db.query(models.Livre).all()
+
+# @app.post("/api/livres", response_model=schemas.LivreResponse, status_code=status.HTTP_201_CREATED, summary="Ajouter un nouveau livre")
+# def add_livre(livre_data: schemas.LivreCreate, db: Session = Depends(get_db)):
+#     new_livre = models.Livre(**livre_data.dict())
+#     db.add(new_livre)
+#     db.commit()
+#     db.refresh(new_livre)
+#     return new_livre
+
+# @app.get("/api/livres/{livre_id}", response_model=schemas.LivreResponse, summary="Récupérer un livre par ID")
+# def get_livre_par_id(livre_id: int, db: Session = Depends(get_db)):
+#     livre = db.query(models.Livre).filter(models.Livre.id == livre_id).first()
+#     if livre is None:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Livre non trouvé.")
+#     return livre
+
+# @app.put("/api/livres/{livre_id}", response_model=schemas.LivreResponse, summary="Mettre à jour un livre")
+# def update_livre(livre_id: int, livre_data: schemas.LivreCreate, db: Session = Depends(get_db)):
+#     livre = db.query(models.Livre).filter(models.Livre.id == livre_id).first()
+#     if livre is None:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Livre non trouvé.")
+#     for field, value in livre_data.dict(exclude_unset=True).items():
+#         setattr(livre, field, value)
+#     db.commit()
+#     db.refresh(livre)
+#     return livre
+
+# @app.delete("/api/livres/{livre_id}", status_code=status.HTTP_200_OK, summary="Supprimer un livre")
+# def delete_livre(livre_id: int, db: Session = Depends(get_db)):
+#     livre = db.query(models.Livre).filter(models.Livre.id == livre_id).first()
+#     if livre is None:
+#         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Livre non trouvé.")
+#     db.delete(livre)
+#     db.commit()
+#     return {"message": "Livre supprimé avec succès."}
+
+# # -------------------------
+# # Routes statistiques API
+# # -------------------------
+# @app.get("/api/statistiques", response_model=schemas.StatistiquesResponse, summary="Obtenir les statistiques de la bibliothèque")
+# def get_statistiques(db: Session = Depends(get_db)):
+#     top_livres = db.query(
+#         models.Livre.titre.label("title"),
+#         func.count(models.Emprunt.id).label("emprunts")
+#     ).join(models.Emprunt).group_by(models.Livre.id).order_by(func.count(models.Emprunt.id).desc()).limit(5).all()
+
+#     top_livres_list = [{"title": l.title, "emprunts": l.emprunts} for l in top_livres]
+
+#     total_books = db.query(models.Livre).count() or 1
+#     total_available_books = db.query(models.Livre).filter(models.Livre.availability_num > 0).count()
+#     taux_disponibilite = (total_available_books / total_books) * 100
+
+#     nombre_retards = db.query(models.Emprunt).filter(
+#         and_(
+#             models.Emprunt.date_retour_effectif.is_(None),
+#             models.Emprunt.date_retour_prevue < datetime.now()
+#         )
+#     ).count()
+
+#     return {
+#         "top_livres_empruntes": top_livres_list,
+#         "taux_disponibilite": taux_disponibilite,
+#         "nombre_retards": nombre_retards,
+#     }'''

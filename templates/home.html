@@ -68,22 +68,22 @@
           <li class="nav-item"><a class="nav-link" href="/catalogue">Catalogue</a></li>
           <li class="nav-item"><a class="nav-link" href="/profil">Mes emprunts</a></li>
           <li class="nav-item"><a class="nav-link" href="/recommandation-par-description">Recommandations</a></li>
-          <li class="nav-item"><a class="nav-link" href="admin/gestion-adherents">Gestion des adhérents</a></li>
+          <!--<li class="nav-item"><a class="nav-link" href="admin/gestion-adherents">Gestion des adhérents</a></li>-->
           
         </ul>
 
         <!-- Boutons Se connecter / S'inscrire -->
         <ul class="navbar-nav mb-2 mb-lg-0">
           <li class="nav-item">
-            <a class="btn btn-primary btn-sm me-2" href="/api/login">Se connecter</a>
+            <a class="btn btn-primary btn-sm me-2" href="/login">Se connecter</a>
           </li>
           <li class="nav-item">
-            <a class="btn btn-success btn-sm" href="/api/register">S'inscrire</a>
+            <a class="btn btn-success btn-sm" href="/register">S'inscrire</a>
           </li>
         </ul>
 
         <!-- Barre de recherche -->
-        <form class="d-flex ms-3" role="search" action="/catalogue" method="get">
+        <form class="d-flex ms-3" role="search" action="/home" method="get">
           <input class="form-control me-2" type="search" name="search" placeholder="Rechercher un livre..."
             aria-label="Rechercher">
           <button class="btn btn-outline-success" type="submit">Rechercher</button>
@@ -104,8 +104,8 @@
       Connectez-vous pour accéder à vos services personnalisés : consulter le stock,
       réserver un livre, suivre vos emprunts et obtenir des recommandations adaptées à vos goûts.
     </p>
-    <a class="btn btn-primary btn-lg" href="/api/login" role="button">Se connecter</a>
-    <a class="btn btn-success btn-lg ms-2" href="/api/register" role="button">S'inscrire</a>
+    <a class="btn btn-primary btn-lg" href="/login" role="button">Se connecter</a>
+    <a class="btn btn-success btn-lg ms-2" href="/register" role="button">S'inscrire</a>
   </div>
 
   <!-- Liste des livres -->
@@ -141,7 +141,7 @@
               <button type="submit" class="btn btn-success">📚 Réserver</button>
             </form>-->
             {% else %}
-            <button class="btn btn-secondary" disabled>Indisponible</button>
+            <!--<button class="btn btn-secondary" disabled>Indisponible</button>-->
             {% endif %}
 
             <!-- ✅ Lien vers la page détails du livre -->

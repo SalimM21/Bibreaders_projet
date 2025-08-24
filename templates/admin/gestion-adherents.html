@@ -4,18 +4,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title></title>
+    <title>Gestion des Adhérents</title>
 
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
-    <!-- Favicon -->
-    <link rel="icon" href="/static/images/favicon.ico" type="image/x-icon">
-
     <!-- Styles internes -->
     <style>
         body {
-            background-image: url('/static/images/background18.jpeg');
+            /* background-image: url('/static/images/background18.jpeg'); */
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
@@ -28,7 +25,6 @@
             justify-content: flex-start;
             background-color: #e9ecef;
             padding-top: 80px;
-            /* pour éviter que le contenu soit caché sous la navbar */
         }
 
         .navbar {
@@ -129,109 +125,217 @@
 </head>
 
 <body>
-
     <!-- Barre de navigation -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-light shadow-sm">
-        <div class="container-fluid">
-            <!-- Logo et nom -->
-            <a class="navbar-brand fw-bold" href="/">📚 Bib Readers</a>
-
-            <!-- Bouton menu mobile -->
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-                aria-controls="navbarNav" aria-expanded="false" aria-label="Basculer la navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-
-            <!-- Liens -->
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <!-- Accueil -->
-                    <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" href="/">Accueil</a>
-                    </li>
-                    <!-- Catalogue -->
-                    <li class="nav-item">
-                        <a class="nav-link" href="/catalogue">Catalogue</a>
-                    </li>
-                    <!-- Mes emprunts -->
-                    <li class="nav-item">
-                        <a class="nav-link" href="/profil">Mes emprunts</a>
-                    </li>
-                    <!-- Recommandations IA -->
-                    <li class="nav-item">
-                        <a class="nav-link" href="/recommandation-par-description">Recommandations</a>
-                    </li>
-                    <!-- Gestion des adhérents -->
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/gestion-adherents">Gestion des adhérents</a>
-                    </li>
-                    <!-- Gestion des emprunts -->
-                    <li class="nav-item">
-                        <a class="nav-link" href="/admin/emprunts">Gestion des emprunts</a>
-                </ul>
-
-                <!-- Champ de recherche -->
-                <form class="d-flex me-3" action="/recherche" method="GET">
-                    <input class="form-control me-2" type="search" name="q" placeholder="Rechercher un livre..."
-                        aria-label="Rechercher un livre">
-                    <button class="btn btn-outline-success" type="submit">Rechercher</button>
-                </form>
-
-                <!-- Bouton de déconnexion -->
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="btn btn-danger btn-sm" href="/logout">Se déconnecter</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
+    
     <!-- Contenu principal -->
     <div class="container">
-        <h1>Liste des Adhérents</h1>
+        <h1 class="mb-4">Liste des Adhérents</h1>
 
-        <!-- Message de succès -->
-        <div class="alert alert-success">Adhérent ajouté avec succès !</div>
+        <div id="status-message" class="alert d-none" role="alert"></div>
 
-        <!-- Bouton pour ajouter -->
-        <a href="/add-adherent" class="btn btn-primary mb-3">Ajouter un nouvel adhérent</a>
+        <button class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#addAdherentModal">
+            Ajouter un nouvel adhérent
+        </button>
 
-        <!-- Tableau -->
-        <table class="table table-striped table-bordered">
-            <thead class="table-bordered">
-                <tr>
-                    <th>ID</th>
-                    <th>Nom</th>
-                    <th>Email</th>
-                    <th>Rôle</th>
-                    <th>Date d'inscription</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Exemple d'adhérent -->
-        {% for adh in adherents %}
-            <tr>
-              <td>{{ adh.id }}</td>
-              <td>{{ adh.nom }}</td>
-              <td>{{ adh.email }}</td>
-              <td class="{{ 'suspendu' if adh.role == 'Suspendu' else '' }}">
-                {{ adh.role }}</td>
-              <td>
-               <a href="/modify/{{ adh.id }}" class="btn btn-warning btn-sm"> Modifier</a>
-               <a href="/delete/{{ adh.id }}" class="btn btn-danger btn-sm"
-                onclick="return confirm('Confirmer la suspension ?')">Suspendre</a> </td>
-            </tr>
-        {% endfor %}
-            </tbody>
-    </table>
+        <!-- Tableau des adhérents -->
+        <div class="table-responsive">
+            <table class="table table-striped table-hover table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Nom</th>
+                        <th>Email</th>
+                        <th>Statut</th>
+                        <th>Date d'inscription</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="adherent-table-body">
+                    <!-- Le contenu sera généré ici par JS -->
+                </tbody>
+            </table>
+        </div>
     </div>
 
+    <!-- Modale de modification d'adhérent -->
+    <div class="modal fade" id="editAdherentModal" tabindex="-1" aria-labelledby="editAdherentModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editAdherentModalLabel">Modifier l'adhérent</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-adherent-form">
+                        <input type="hidden" id="edit-adherent-id">
+                        <div class="mb-3">
+                            <label for="edit-nom" class="form-label">Nom</label>
+                            <input type="text" class="form-control" id="edit-nom" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit-email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="edit-email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="edit-role" class="form-label">Statut</label>
+                            <select class="form-select" id="edit-role">
+                                <option value="actif">Actif</option>
+                                <option value="suspendu">Suspendu</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modale d'ajout d'adhérent -->
+    <div class="modal fade" id="addAdherentModal" tabindex="-1" aria-labelledby="addAdherentModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addAdherentModalLabel">Ajouter un nouvel adhérent</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-adherent-form">
+                        <div class="mb-3">
+                            <label for="add-nom" class="form-label">Nom</label>
+                            <input type="text" class="form-control" id="add-nom" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="add-email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="add-email" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Ajouter</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Simulation des données de la base de données
+        let adherents = [
+            { id: 1, nom: "Alice Dubois", email: "alice@gmail.com", role: "actif", date_inscription: "2025-08-15" },
+            { id: 2, nom: "Bob Martin", email: "bob@gmail.com", role: "suspendu", date_inscription: "2025-08-16" },
+            { id: 3, nom: "Claire Bernard", email: "claire@gmail.com", role: "actif", date_inscription: "2025-08-16" },
+            { id: 4, nom: "Salim Majid", email: "salim@gmail.com", role: "actif", date_inscription: "2025-08-22" },
+            { id: 5, nom: "Ikram Naoui", email: "ikram@gmail.com", role: "actif", date_inscription: "2025-08-23" },
+            { id: 6, nom: "Btissam Sannaky", email: "btissam@gmail.com", role: "suspendu", date_inscription: "2025-08-23" }
+
+
+
+        ];
+        let nextAdherentId = 6;
+
+        function renderAdherents() {
+            const tableBody = document.getElementById('adherent-table-body');
+            tableBody.innerHTML = '';
+            adherents.forEach(adh => {
+                const row = document.createElement('tr');
+                const roleClass = adh.role === 'suspendu' ? 'table-danger' : '';
+                row.className = roleClass;
+                row.innerHTML = `
+                    <td>${adh.id}</td>
+                    <td>${adh.nom}</td>
+                    <td>${adh.email}</td>
+                    <td class="${adh.role === 'suspendu' ? 'text-danger fw-bold' : ''}">${adh.role}</td>
+                    <td>${adh.date_inscription}</td>
+                    <td>
+                        <button class="btn btn-warning btn-sm" onclick="showEditModal(${adh.id})">Modifier</button>
+                        <button class="btn btn-danger btn-sm" onclick="suspendAdherent(${adh.id})">${adh.role === 'suspendu' ? 'Réactiver' : 'Suspendre'}</button>
+                    </td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function showStatusMessage(message, isSuccess) {
+            const statusDiv = document.getElementById('status-message');
+            statusDiv.textContent = message;
+            statusDiv.className = `alert mt-3 d-block ${isSuccess ? 'alert-success' : 'alert-danger'}`;
+            setTimeout(() => {
+                statusDiv.className = 'alert d-none';
+            }, 3000);
+        }
+        
+        // Gérer la suspension/réactivation
+        function suspendAdherent(id) {
+            const adherent = adherents.find(adh => adh.id === id);
+            if (adherent) {
+                adherent.role = adherent.role === 'suspendu' ? 'actif' : 'suspendu';
+                // En réalité, on ferait un appel API ici : fetch('/api/suspend/' + id, { method: 'POST' });
+                showStatusMessage(`Statut de ${adherent.nom} mis à jour : ${adherent.role}.`, true);
+                renderAdherents();
+            }
+        }
+
+        // Pré-remplir la modale de modification
+        function showEditModal(id) {
+            const adherent = adherents.find(adh => adh.id === id);
+            if (adherent) {
+                document.getElementById('edit-adherent-id').value = adherent.id;
+                document.getElementById('edit-nom').value = adherent.nom;
+                document.getElementById('edit-email').value = adherent.email;
+                document.getElementById('edit-role').value = adherent.role;
+                const modal = new bootstrap.Modal(document.getElementById('editAdherentModal'));
+                modal.show();
+            }
+        }
+
+        // Gérer la soumission du formulaire de modification
+        document.getElementById('edit-adherent-form').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const id = parseInt(document.getElementById('edit-adherent-id').value);
+            const nom = document.getElementById('edit-nom').value;
+            const email = document.getElementById('edit-email').value;
+            const role = document.getElementById('edit-role').value;
+
+            const adherent = adherents.find(adh => adh.id === id);
+            if (adherent) {
+                adherent.nom = nom;
+                adherent.email = email;
+                adherent.role = role;
+                // En réalité, on ferait un appel API ici : fetch('/api/modify/' + id, { method: 'PUT', body: JSON.stringify({ nom, email, role }) });
+                showStatusMessage(`Adhérent ${nom} modifié avec succès.`, true);
+                renderAdherents();
+                const modal = bootstrap.Modal.getInstance(document.getElementById('editAdherentModal'));
+                modal.hide();
+            }
+        });
+        
+        // Gérer la soumission du formulaire d'ajout
+        document.getElementById('add-adherent-form').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const nom = document.getElementById('add-nom').value;
+            const email = document.getElementById('add-email').value;
+            
+            const nouvelAdherent = {
+                id: nextAdherentId++,
+                nom: nom,
+                email: email,
+                role: 'actif',
+                date_inscription: new Date().toISOString().slice(0, 10)
+            };
+            adherents.push(nouvelAdherent);
+            
+            // En réalité, on ferait un appel API ici : fetch('/api/add-adherent', { method: 'POST', body: JSON.stringify({ nom, email }) });
+            showStatusMessage(`Adhérent ${nom} ajouté avec succès.`, true);
+            renderAdherents();
+            event.target.reset();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addAdherentModal'));
+            modal.hide();
+        });
+
+        // Initialisation de la page
+        renderAdherents();
+    </script>
 </body>
 
 </html>

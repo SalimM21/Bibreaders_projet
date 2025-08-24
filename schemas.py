@@ -30,6 +30,7 @@ class Adherent(AdherentBase):
 
 
 
+
 # ---------------------
 # Livre
 # ---------------------
@@ -58,6 +59,13 @@ class Livre(LivreBase):
 
 
 
+class LivreResponse(LivreBase):
+    id: int
+
+    class Config:
+        #orm_mode = True
+        from_attributes = True
+        
 # ---------------------
 # Reservation
 # ---------------------
@@ -84,6 +92,20 @@ class Reservation(ReservationBase):
 
 
 
+
+
+
+from pydantic import BaseModel
+from typing import List
+
+class TopLivre(BaseModel):
+    title: str
+    emprunts: int
+
+class StatistiquesResponse(BaseModel):
+    top_livres_empruntes: List[TopLivre]
+    taux_disponibilite: float
+    nombre_retards: int
 
 
 
